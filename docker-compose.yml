@@ -1,0 +1,26 @@
+version:  '3.7'
+services:
+    app:
+        build: .
+        volumes:
+            - ./:/var/www/html
+        working_dir: /var/www/html/
+        ports:
+            - "80:80"
+    mysql:
+        image: mysql:5.7
+        ports:
+            - "3306:3306"
+        environment:
+            MYSQL_ROOT_PASSWORD: root
+            MYSQL_DATABASE: laravel
+            MYSQL_USER: laravel
+            MYSQL_PASSWORD: laravel
+        volumes:
+            - ./docker/mysql/data:/var/lib/mysql/
+    composer:
+        image: composer:2.2
+        volumes:
+            - ./:/app
+        working_dir: /app
+        command: install
