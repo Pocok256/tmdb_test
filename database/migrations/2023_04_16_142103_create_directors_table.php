@@ -16,8 +16,7 @@ return new class extends Migration
             $table->string('name');
             $table->integer('tmdb_id')->unique();
             $table->longText('biography');
-            $table->string('tmdb_url');
-            $table->date('birthday');
+            $table->date('birthday')->nullable();
             $table->timestamps();
         });
     }

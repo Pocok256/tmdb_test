@@ -16,7 +16,6 @@ return new class extends Migration
             $table->integer('tmdb_id')->unique();
             $table->integer('vote_average');
             $table->integer('vote_count');
-            $table->string('url');
             $table->timestamps();
         });
     }

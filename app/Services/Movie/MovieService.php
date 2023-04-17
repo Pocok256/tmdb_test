@@ -4,12 +4,16 @@ namespace App\Services\Movie;
 
 
 
+use App\Http\Requests\DirectorRequest;
+use App\Http\Requests\GenreRequest;
+use App\Http\Requests\TmdbRequest;
 use App\Models\Director;
 use App\Models\Genre;
 use App\Models\Movie;
 use App\Models\Tmdb;
 use App\Repositories\MovieRepository;
-use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Validator;
 
 class MovieService
 {
@@ -20,17 +24,15 @@ class MovieService
     public function UpdateOrCreate(array $movie)
     {
         //TODO need check through movie Model
-        if (!Tmdb::where('tmdb_id', $movie['movie']['id'])) {
-            $movieModel = $this->normalizeMovieData($movie);
-            $director = Director::firstOrCreate(['tmdb_id' => $movie['director']['id']], ['name' => $movie['director']['name'], 'biography' => $movie['director']['biography'], 'birthday' => $movie['director']['birthday'], 'place_of_birth' => $movie['director']['place_of_birth'], 'tmdb_url' => $movie['director']['profile_path']]);
-            $movieModel['director_id'] = $director->id;
-            $movieModel['tmdb_id'] = Tmdb::updateOrCreate(['tmdb_id' => $movie['movie']['id']], ['vote_average' => $movie['movie']['vote_average'], 'vote_count' => $movie['movie']['vote_count'], 'url' => "https://www.themoviedb.org/movie/" . $movie['movie']['id']])->id;
-            $movieModel = Movie::create($movieModel);
-            foreach ($movie['movie_details']['genres'] as $genre) {
-                $genre = Genre::firstOrCreate(['name' => $genre['name']]);
-                //TODO need refactor
-                $movieModel->genres()->syncWithoutDetaching($genre);
-            }
+        if (!Tmdb::where('tmdb_id', $movie['movie']['id'])->exists()) {
+            DB::transaction(function () use ($movie) {
+                $movieModel = $this->normalizeMovieData($movie);
+                $director = $this->firstOrCreateDirector($movie['director']);
+                $movieModel['director_id'] = $director->id;
+                $movieModel['tmdb_id'] = $this->updateOrCreateTmdb($movie);
+                $movieModel = Movie::create($movieModel);
+                $this->saveGenre($movie['movie_details']['genres'], $movieModel);
+            });
         }
     }
 
@@ -42,6 +44,37 @@ class MovieService
         $movieModel['overview'] = $movie['movie_details']['overview'];
         $movieModel['poster_url'] = $movie['movie']['poster_path'];
         return $movieModel;
+    }
+
+    public function updateOrCreateTmdb(array $movie)
+    {
+        $tmdbData = Validator::validate($movie['movie'], (new TmdbRequest())->rules());
+        $tmdbData['tmdb_id'] = $tmdbData['id'];
+        $tmdb = Tmdb::updateOrCreate(['tmdb_id' => $tmdbData['tmdb_id']],$tmdbData);
+        return $tmdb->id;
+    }
+
+    function firstOrCreateDirector($director)
+    {
+        $directorData = Validator::validate($director, (new DirectorRequest())->rules());
+        //TODO need to extract this logic to DirectorRepository
+        $directorData['tmdb_id'] = $directorData['id'];
+        return Director::firstOrCreate(['tmdb_id' => $directorData['tmdb_id']],$directorData);
+    }
+
+    /**
+     * @param $genres
+     * @param $movieModel
+     * @return void
+     */
+    function saveGenre($genres, $movieModel): void
+    {
+        foreach ($genres as $genre) {
+            $genreData = Validator::validate($genre, (new GenreRequest())->rules());
+            $genre = Genre::firstOrCreate($genreData);
+            //TODO need refactor
+            $movieModel->genres()->syncWithoutDetaching($genre);
+        }
     }
 
 }
